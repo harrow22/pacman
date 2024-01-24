@@ -1,10 +1,6 @@
-add_executable(${PROJECT_NAME} Emulator.cpp
-        components/Memory.cpp
-        components/Memory.h
-        components/Display.cpp
-        components/Display.h
-        components/Keyboard.cpp
-        components/Keyboard.h)
+add_executable(${PROJECT_NAME} main.cpp
+        Pacman.cpp
+        Pacman.h)
 target_link_libraries(${PROJECT_NAME}
         PRIVATE z80
         PRIVATE SDL2::SDL2main
