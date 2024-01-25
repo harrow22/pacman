@@ -1,10 +1,9 @@
 #include "Pacman.h"
 #include <fstream>
-#include <iostream>
 
 Pacman::Pacman(const std::uint8_t ds) : dipswitch{ds}
 {
-    const std::string dir {"/../../assets/roms/"};
+    const std::string dir {"roms/"};
     active &= load(rom, dir + "pacman.6e", 0, 0x1000);
     active &= load(rom, dir + "pacman.6f", 0x1000, 0x1000);
     active &= load(rom, dir + "pacman.6h", 0x2000, 0x1000);
@@ -52,6 +51,27 @@ Pacman::Pacman(const std::uint8_t ds) : dipswitch{ds}
         SDL_RenderClear(renderer);
         SDL_RenderPresent(renderer);
 
+        // preload tiles
+        for (int i {0}; i != tiles.size(); ++i) {
+            Tile& tile {tiles[i]};
+            for (int j {0}; j != 16; ++j) {
+                const int byte {tileRom[j + (i * 16)]};
+                const int msb {byte >> 4U};
+                const int lsb {byte & 0xF};
+                const int coord {j < 8 ? (32 + j) : j}; // first 4 bytes draw the bottom row
+
+                tile[coord + 0] = ((msb | lsb) & 0b0001U) >> 0U;
+                tile[coord + 8] = ((msb | lsb) & 0b0010U) >> 1U;
+                tile[coord + 16] = ((msb | lsb) & 0b0100U) >> 2U;
+                tile[coord + 24] = ((msb | lsb) & 0b1000U) >> 3U;
+            }
+        }
+
+        // preload palettes
+        for (int i {0}; i != palettes.size(); ++i) {
+
+        }
+
         active = true;
     }
 }
@@ -60,8 +80,10 @@ std::uint8_t Pacman::read8(const std::uint16_t addr) const
 {
     if (addr < 0x4000) {
         return rom[addr];
+    } else if (addr < 0x4400) {
+        return tileRam[addr - 0x4000];
     } else if (addr < 0x4800) {
-        return vram[addr - 0x4000];
+        return paletteRam[addr - 0x4400];
     } else if (addr < 0x4FF0) {
         return ram[addr - 0x4800];
     } else if (addr < 0x5100) { // IO
@@ -73,15 +95,22 @@ std::uint8_t Pacman::read8(const std::uint16_t addr) const
             return dipswitch;
         }
     } else {
-        std::cerr << std::format("error: attempt to read at {:>04X}\n", addr);
+        SDL_Log("error: attempt to read at %04X\n", addr);
     }
     return 0;
 }
 
 void Pacman::write8(const std::uint16_t addr, const std::uint8_t val)
 {
-    if (0x3FFF < addr and addr < 0x4800) {
-        vram[addr - 0x4000] = val;
+    if (addr < 0x4000) {
+        SDL_Log("error: attempt to write %02X at %04X\n", val, addr);
+        return;
+    }
+
+    if (addr < 0x4400) {
+        tileRam[addr - 0x4000] = val;
+    } else if (addr < 0x4800) {
+        paletteRam[addr - 0x4400] = val;
     } else if (addr < 0x4FF0) {
         ram[addr - 0x4800] = val;
     } else if (addr < 0x5100) { // IO
@@ -106,7 +135,7 @@ void Pacman::write8(const std::uint16_t addr, const std::uint8_t val)
             spriteNum[addr - 0x5060] = val;
         }
     } else {
-        std::cerr << std::format("error: attempt to write {:>02X} at {:>04X}\n", val, addr);
+        SDL_Log("error: attempt to write %02X at %04X\n", val, addr);
     }
 }
 
@@ -146,6 +175,16 @@ void Pacman::onKeyUp(SDL_Scancode scancode)
     }
 }
 
+void Pacman::drawTile(const int loc, const int x, const int y)
+{
+    Tile& tile {tiles[loc]};
+
+    for (int i {0}; i != 8; ++i) {
+        for (int j {0}; j != 8; ++j)
+            rasterBuffer[x + i][y + (i * 8)] = tile[j + (i * 8)] ? 0xFFFFFFFF : 0xFF000000;
+    }
+}
+
 void Pacman::draw()
 {
     /*
@@ -161,6 +200,37 @@ void Pacman::draw()
             rasterBuffer[row][col] = (byte >> bit) & 0b1 ? 0xFFFFFFFF : 0xFF000000;
         }
     }*/
+
+    // DRAWING TILES
+
+
+    for (int y {0}; y != 2; ++y) {
+        for (int x {0}; x != 32; ++x)
+            drawTile(x + (y * 32), 31 - x, 34 + y);
+    }
+
+    for (int i {0}; i != 64; ++i) {
+        const std::uint8_t byte {tileRam[i]};
+        // i=0 => x=31, y=34
+        // i=1 => x=30, y=34
+        // .
+        // .
+        // .
+        // i=33 => x=31, y=35
+        // i=34 => x=30, y=35
+
+
+    }
+
+    for (int i {64}; i != 0x380 + 64; ++i) {
+        const std::uint8_t byte {tileRam[i]};
+
+    }
+
+    for (int i {0x380 + 64}; i != 0x380 + 64 + 64; ++i) {
+        const std::uint8_t byte {tileRam[i]};
+
+    }
 
     SDL_UpdateTexture(texture, nullptr, rasterBuffer, pitch);
     SDL_RenderClear(renderer);
@@ -183,14 +253,14 @@ bool Pacman::load(std::uint8_t* array, const std::string& path, const int addr, 
     std::ifstream file {path, std::ios::binary};
 
     if (!file.is_open()) {
-        std::cerr << std::format("error: can't open file '{:s}'.\n", path);
+        SDL_Log("error: can't open file '%s'.\n", path.c_str());
         return false;
     }
 
     file.read(reinterpret_cast<char*>(array) + addr, sz);
 
     if (file.bad()) {
-        std::cerr << std::format("error [errno={:d}]: failed when reading file '{:s}'.\n", errno, path);
+        SDL_Log("error [errno=%d]: failed when reading file '%s'.\n", errno, path.c_str());
         return false;
     }
 

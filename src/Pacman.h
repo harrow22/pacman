@@ -13,6 +13,8 @@
 class Pacman {
 public:
     using Z80 = z80<Pacman>;
+    using Tile = std::uint8_t[64];
+    using Palette = std::uint8_t[4];
 
     // Constructor (also sets the active boolean).
     explicit Pacman(std::uint8_t ds);
@@ -32,7 +34,7 @@ public:
     void write8(std::uint16_t addr, std::uint8_t val);
 
     // Reads a word from the address given (uses read8).
-    [[nodiscard]] std::uint16_t read16(const std::uint16_t addr) const { return read8(addr + 1) << 8 | read8(addr); }
+    [[nodiscard]] std::uint16_t read16(const std::uint16_t addr) { return read8(addr + 1) << 8 | read8(addr); }
 
     // Writes a word to the address given (uses write8).
     void write16(const std::uint16_t addr, const std::uint16_t val) { write8(addr, val & 0xFF); write8(addr + 1, val >> 8); }
@@ -51,7 +53,7 @@ public:
      * @param port The port to write to
      * @param val a byte to write
      */
-    void output(const Pacman::Z80 *cpu, const std::uint8_t port, const std::uint8_t val) { if (port == 0) vector = val; }
+    void output(const Pacman::Z80 *cpu, const std::uint8_t port, const std::uint8_t val) { if (port == 0) interruptVector = val; }
 
     /**
      * Call on key press.
@@ -73,6 +75,8 @@ public:
 
     // True if Pacman has been initialized successfully; false otherwise.
     bool active {true};
+    std::uint8_t interruptVector {};
+    bool interruptEnabled {false};
 private:
     // input constants
     static constexpr std::uint8_t up {0b00000001U};
@@ -90,16 +94,16 @@ private:
 
     // display constants
     static constexpr int screenWidth {224};
-    static constexpr int screenHeight {256};
+    static constexpr int screenHeight {288};
     static constexpr int scaleFactor {3};
     static constexpr int pitch {screenWidth * sizeof(std::uint32_t)};
 
     static bool load(std::uint8_t*, const std::string& path, int addr, int sz);
+    void drawTile(int loc, int x, int y);
 
     const std::uint8_t dipswitch;
-    std::uint8_t vector {};
     std::uint8_t input0 {}, input1 {0b10000000U}; // setting cabinet mode to upright
-    bool interruptEnabled {false}, soundEnabled {false}, flipScreen {false};
+    bool soundEnabled {false}, flipScreen {false};
 
     std::uint32_t rasterBuffer[screenHeight][screenWidth] {};
     SDL_Window* window {nullptr};
@@ -107,7 +111,8 @@ private:
     SDL_Texture* texture {nullptr};
 
     std::uint8_t rom[0x4000] {};
-    std::uint8_t vram[0x800] {};
+    std::uint8_t tileRam[0x400] {};
+    std::uint8_t paletteRam[0x400] {};
     std::uint8_t ram[0x7F0] {};
     std::uint8_t spriteNum[0x10] {};
     std::uint8_t io[0x100] {};
@@ -116,6 +121,9 @@ private:
     std::uint8_t paletteRom[0x100] {};
     std::uint8_t tileRom[0x1000] {};
     std::uint8_t spriteRom[0x1000] {};
+
+    std::array<Tile, 256> tiles {};
+    std::array<Palette, 64> palettes {};
 };
 
 
