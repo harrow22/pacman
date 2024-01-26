@@ -1,5 +1,7 @@
 #include "Pacman.h"
+#include <format>
 #include <fstream>
+#include <iostream>
 
 Pacman::Pacman(const std::uint8_t ds) : dipswitch{ds}
 {
@@ -12,68 +14,8 @@ Pacman::Pacman(const std::uint8_t ds) : dipswitch{ds}
     active &= load(paletteRom, dir + "82s126.4a", 0, 0x100);
     active &= load(tileRom, dir + "pacman.5e", 0, 0x1000);
     active &= load(spriteRom, dir + "pacman.5f", 0, 0x1000);
-
-    if (active) {
-        active = false;
-
-        // set up display contents
-        window = SDL_CreateWindow(
-                "Pac-Man",
-                SDL_WINDOWPOS_CENTERED,
-                SDL_WINDOWPOS_CENTERED,
-                screenWidth * scaleFactor,
-                screenHeight * scaleFactor,
-                SDL_WINDOW_SHOWN);
-        if (!window) {
-            SDL_Log("SDL_CreateWindow() failed. SDL_Error: %s\n", SDL_GetError());
-            return;
-        }
-
-        renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_PRESENTVSYNC);
-        if (!renderer){
-            SDL_Log("SDL_CreateRenderer() failed. SDL_Error: %s\n", SDL_GetError());
-            return;
-        }
-
-        texture = SDL_CreateTexture(renderer,
-                                    SDL_PIXELFORMAT_ABGR8888,
-                                    SDL_TEXTUREACCESS_STREAMING,
-                                    screenWidth, screenHeight);
-        if (!texture){
-            SDL_Log("SDL_CreateTexture() failed. SDL_Error: %s\n", SDL_GetError());
-            return;
-        }
-
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-        SDL_RenderSetLogicalSize(renderer, screenWidth, screenHeight);
-
-        // initialize screen
-        SDL_RenderClear(renderer);
-        SDL_RenderPresent(renderer);
-
-        // preload tiles
-        for (int i {0}; i != tiles.size(); ++i) {
-            Tile& tile {tiles[i]};
-            for (int j {0}; j != 16; ++j) {
-                const int byte {tileRom[j + (i * 16)]};
-                const int msb {byte >> 4U};
-                const int lsb {byte & 0xF};
-                const int coord {j < 8 ? (32 + j) : j}; // first 4 bytes draw the bottom row
-
-                tile[coord + 0] = ((msb | lsb) & 0b0001U) >> 0U;
-                tile[coord + 8] = ((msb | lsb) & 0b0010U) >> 1U;
-                tile[coord + 16] = ((msb | lsb) & 0b0100U) >> 2U;
-                tile[coord + 24] = ((msb | lsb) & 0b1000U) >> 3U;
-            }
-        }
-
-        // preload palettes
-        for (int i {0}; i != palettes.size(); ++i) {
-
-        }
-
-        active = true;
-    }
+    if (active) active &= initVideo();
+    if (active) preload();
 }
 
 std::uint8_t Pacman::read8(const std::uint16_t addr) const
@@ -95,7 +37,7 @@ std::uint8_t Pacman::read8(const std::uint16_t addr) const
             return dipswitch;
         }
     } else {
-        SDL_Log("error: attempt to read at %04X\n", addr);
+        std::cout << std::format("error: attempt to read at {:0>4X}\n", addr);
     }
     return 0;
 }
@@ -103,7 +45,7 @@ std::uint8_t Pacman::read8(const std::uint16_t addr) const
 void Pacman::write8(const std::uint16_t addr, const std::uint8_t val)
 {
     if (addr < 0x4000) {
-        SDL_Log("error: attempt to write %02X at %04X\n", val, addr);
+        std::cout << std::format("error: attempt to write {:0>2X} at {:0>4X}\n", val, addr);
         return;
     }
 
@@ -135,7 +77,7 @@ void Pacman::write8(const std::uint16_t addr, const std::uint8_t val)
             spriteNum[addr - 0x5060] = val;
         }
     } else {
-        SDL_Log("error: attempt to write %02X at %04X\n", val, addr);
+        std::cout << std::format("error: attempt to write {:0>2X} at {:0>4X}\n", val, addr);
     }
 }
 
@@ -178,10 +120,13 @@ void Pacman::onKeyUp(SDL_Scancode scancode)
 void Pacman::drawTile(const int loc, const int x, const int y)
 {
     Tile& tile {tiles[loc]};
+    Palette& palette {palettes[loc]};
 
     for (int i {0}; i != 8; ++i) {
-        for (int j {0}; j != 8; ++j)
+        for (int j {0}; j != 8; ++j) {
+            const int coord {};
             rasterBuffer[x + i][y + (i * 8)] = tile[j + (i * 8)] ? 0xFFFFFFFF : 0xFF000000;
+        }
     }
 }
 
@@ -253,17 +198,124 @@ bool Pacman::load(std::uint8_t* array, const std::string& path, const int addr, 
     std::ifstream file {path, std::ios::binary};
 
     if (!file.is_open()) {
-        SDL_Log("error: can't open file '%s'.\n", path.c_str());
+        std::cout << std::format("error: can't open file '{:s}'.\n", path);
         return false;
     }
 
     file.read(reinterpret_cast<char*>(array) + addr, sz);
 
     if (file.bad()) {
-        SDL_Log("error [errno=%d]: failed when reading file '%s'.\n", errno, path.c_str());
+        std::cout << std::format("error [errno={:d}]: failed when reading file '{:s}'.\n", errno, path);
         return false;
     }
 
     return true;
 }
 
+bool Pacman::initVideo()
+{
+    window = SDL_CreateWindow(
+            "Pac-Man",
+            SDL_WINDOWPOS_CENTERED,
+            SDL_WINDOWPOS_CENTERED,
+            screenWidth * scaleFactor,
+            screenHeight * scaleFactor,
+            SDL_WINDOW_SHOWN);
+    if (!window) {
+        std::cout << std::format("SDL_CreateWindow() failed. SDL_Error: {:s}\n", SDL_GetError());
+        return false;
+    }
+
+    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_PRESENTVSYNC);
+    if (!renderer){
+        std::cout << std::format("SDL_CreateWindow() failed. SDL_Error: {:s}\n", SDL_GetError());
+        return false;
+    }
+
+    texture = SDL_CreateTexture(renderer,
+                                SDL_PIXELFORMAT_ABGR8888,
+                                SDL_TEXTUREACCESS_STREAMING,
+                                screenWidth, screenHeight);
+    if (!texture){
+        std::cout << std::format("SDL_CreateWindow() failed. SDL_Error: {:s}\n", SDL_GetError());
+        return false;
+    }
+
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+    SDL_RenderSetLogicalSize(renderer, screenWidth, screenHeight);
+
+    // initialize screen
+    SDL_RenderClear(renderer);
+    SDL_RenderPresent(renderer);
+    return true;
+}
+
+void Pacman::preload()
+{
+    // load tiles
+    for (int i {0}; i != tiles.size(); ++i) {
+        Tile& tile {tiles[i]};
+        for (int j {0}; j != 8; ++j) {
+            const std::uint8_t byte {tileRom[j + (i * 16)]};
+            const int msb {byte >> 4U};
+            const int lsb {byte & 0xF};
+            const int coord {39 - j}; // first 4 bytes draw the bottom row
+
+            tile[coord + 24] = ((msb | lsb) & 0b0001U) >> 0U;
+            tile[coord + 16] = ((msb | lsb) & 0b0010U) >> 1U;
+            tile[coord + 8] = ((msb | lsb) & 0b0100U) >> 2U;
+            tile[coord + 0] = ((msb | lsb) & 0b1000U) >> 3U;
+        }
+
+        for (int j {0}; j != 8; ++j) {
+            const std::uint8_t byte {tileRom[j + 8 + (i * 16)]};
+            const int msb {byte >> 4U};
+            const int lsb {byte & 0xF};
+            const int coord {7 - j}; // last 4 bytes draw the top row
+
+            tile[coord + 24] = ((msb | lsb) & 0b0001U) >> 0U;
+            tile[coord + 16] = ((msb | lsb) & 0b0010U) >> 1U;
+            tile[coord + 8] = ((msb | lsb) & 0b0100U) >> 2U;
+            tile[coord + 0] = ((msb | lsb) & 0b1000U) >> 3U;
+        }
+    }
+
+    /**
+    for (const Tile& tile : tiles) {
+        for (int i {0}; i != 8; ++i) {
+            for (int j {0}; j != 8; ++j) {
+                std::cout << (tile[j + (i * 8)] ? '*' : ' ') << ' ';
+            }
+            std::cout << '\n';
+        }
+        std::cout << std::endl;
+    }*/
+
+    // load colors
+    for (int i {0}; i != colors.size(); ++i) {
+        const std::uint8_t byte {colorRom[i]};
+        std::uint8_t r {static_cast<uint8_t>(
+                                (((byte >> 0U) & 0b1) * 0x21)
+                                + (((byte >> 1U) & 0b1) * 0x47)
+                                + (((byte >> 2U) & 0b1) * 0x97))};
+        std::uint8_t g {static_cast<uint8_t>(
+                                (((byte >> 3U) & 0b1) * 0x21)
+                                + (((byte >> 4U) & 0b1) * 0x47)
+                                + (((byte >> 5U) & 0b1) * 0x97))};
+        std::uint8_t b {static_cast<uint8_t>(
+                                (((byte >> 6U) & 0b1) * 0x51)
+                                + (((byte >> 7U) & 0b1) * 0xAE))};
+
+        // color format is ABGR (alpha,blue,green,red)
+        colors[i] = (0xFF << 24U) | (b << 16U) | (g << 8U) | (r << 0U);
+    }
+
+    // load palettes
+    for (int i {0}; i != palettes.size(); ++i) {
+        Palette& palette {palettes[i]};
+        for (int j {0}; j != 4; ++j) {
+            const std::uint8_t byte {static_cast<uint8_t>(paletteRom[j + (i * 4)] & 0x0F)};
+            palette[j] = &colors[byte];
+        }
+    }
+}

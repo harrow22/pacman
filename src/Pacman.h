@@ -14,7 +14,8 @@ class Pacman {
 public:
     using Z80 = z80<Pacman>;
     using Tile = std::uint8_t[64];
-    using Palette = std::uint8_t[4];
+    using Color = std::uint32_t;
+    using Palette = Color*[4];
 
     // Constructor (also sets the active boolean).
     explicit Pacman(std::uint8_t ds);
@@ -93,15 +94,40 @@ private:
     static constexpr std::uint8_t cabinet {};
 
     // display constants
+    static constexpr std::uint32_t black {0xFF000000U};
     static constexpr int screenWidth {224};
     static constexpr int screenHeight {288};
     static constexpr int scaleFactor {3};
     static constexpr int pitch {screenWidth * sizeof(std::uint32_t)};
 
-    static bool load(std::uint8_t*, const std::string& path, int addr, int sz);
+    /**
+     * For loading a binary ROM file.
+     * @param array a pointer to where to dump the file's contents
+     * @param path path to the file
+     * @param addr base address to start reading the file from
+     * @param sz size of the array
+     * @return true if there were no errors opening/reading the file; false otherwise
+     */
+    static bool load(std::uint8_t* array, const std::string& path, int addr, int sz);
+
+    /**
+     * Initializes SDL2 objects.
+     * @return true if SDL2 encountered no errors initializing each object; false otherwise
+     */
+    bool initVideo();
+
+    // Preloads the game's tiles, sprites, colors, and palettes from their respective ROMs into a convenient format.
+    void preload();
+
+    /**
+     *
+     * @param loc
+     * @param x
+     * @param y
+     */
     void drawTile(int loc, int x, int y);
 
-    const std::uint8_t dipswitch;
+    const std::uint8_t dipswitch; // game settings
     std::uint8_t input0 {}, input1 {0b10000000U}; // setting cabinet mode to upright
     bool soundEnabled {false}, flipScreen {false};
 
@@ -123,7 +149,8 @@ private:
     std::uint8_t spriteRom[0x1000] {};
 
     std::array<Tile, 256> tiles {};
-    std::array<Palette, 64> palettes {};
+    std::array<Color, 16> colors {};
+    std::array<Palette, 32> palettes {};
 };
 
 
