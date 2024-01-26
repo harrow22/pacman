@@ -119,62 +119,34 @@ void Pacman::onKeyUp(SDL_Scancode scancode)
 
 void Pacman::drawTile(const int loc, const int x, const int y)
 {
-    Tile& tile {tiles[loc]};
-    Palette& palette {palettes[loc]};
+    Tile& tile {tiles[tileRam[loc]]};
+    Palette& palette {palettes[paletteRam[loc]]};
 
     for (int i {0}; i != 8; ++i) {
-        for (int j {0}; j != 8; ++j) {
-            const int coord {};
-            rasterBuffer[x + i][y + (i * 8)] = tile[j + (i * 8)] ? 0xFFFFFFFF : 0xFF000000;
-        }
+        for (int j {0}; j != 8; ++j)
+            rasterBuffer[x*8 + j][y*8 + i] = palette[tile[j + (i * 8)]];
     }
 }
 
 void Pacman::draw()
 {
-    /*
-    for (int i {0}; i != vram.size(); ++i) {
-        const std::uint8_t byte{vram[i]};
-        const int col {i * 8 / screenHeight};
-        int rowBegin {i * 8 % screenHeight};
-
-        for (int bit {0}; bit != 8; ++bit, ++rowBegin) {
-            const int row {screenHeight - rowBegin - 1};
-
-            // transpose the array (rotate 90 degrees counter-clockwise)
-            rasterBuffer[row][col] = (byte >> bit) & 0b1 ? 0xFFFFFFFF : 0xFF000000;
-        }
-    }*/
-
-    // DRAWING TILES
-
-
+    // bottom of screen
     for (int y {0}; y != 2; ++y) {
-        for (int x {0}; x != 32; ++x)
-            drawTile(x + (y * 32), 31 - x, 34 + y);
+        for (int x {2}; x != 30; ++x)
+            drawTile(x + (y * 32), 29 - x, y + 34);
     }
 
-    for (int i {0}; i != 64; ++i) {
-        const std::uint8_t byte {tileRam[i]};
-        // i=0 => x=31, y=34
-        // i=1 => x=30, y=34
-        // .
-        // .
-        // .
-        // i=33 => x=31, y=35
-        // i=34 => x=30, y=35
-
-
+    // middle of screen
+    for (int x {0}; x != 28; ++x) {
+        for (int y {0}; y != 32; ++y) {
+            drawTile(64 + y + (x * 28), 27 - x, y + 2);
+        }
     }
 
-    for (int i {64}; i != 0x380 + 64; ++i) {
-        const std::uint8_t byte {tileRam[i]};
-
-    }
-
-    for (int i {0x380 + 64}; i != 0x380 + 64 + 64; ++i) {
-        const std::uint8_t byte {tileRam[i]};
-
+    // top of screen
+    for (int y {0}; y != 2; ++y) {
+        for (int x {2}; x != 30; ++x)
+            drawTile(960 + x + (y * 32), 29 - x, y);
     }
 
     SDL_UpdateTexture(texture, nullptr, rasterBuffer, pitch);
@@ -183,37 +155,9 @@ void Pacman::draw()
     SDL_RenderPresent(renderer);
 }
 
-void Pacman::off()
-{
-    SDL_DestroyTexture(texture);
-    texture = nullptr;
-    SDL_DestroyRenderer(renderer);
-    renderer = nullptr;
-    SDL_DestroyWindow(window);
-    window = nullptr;
-}
-
-bool Pacman::load(std::uint8_t* array, const std::string& path, const int addr, const int sz)
-{
-    std::ifstream file {path, std::ios::binary};
-
-    if (!file.is_open()) {
-        std::cout << std::format("error: can't open file '{:s}'.\n", path);
-        return false;
-    }
-
-    file.read(reinterpret_cast<char*>(array) + addr, sz);
-
-    if (file.bad()) {
-        std::cout << std::format("error [errno={:d}]: failed when reading file '{:s}'.\n", errno, path);
-        return false;
-    }
-
-    return true;
-}
-
 bool Pacman::initVideo()
 {
+    // display contents
     window = SDL_CreateWindow(
             "Pac-Man",
             SDL_WINDOWPOS_CENTERED,
@@ -250,6 +194,36 @@ bool Pacman::initVideo()
     return true;
 }
 
+
+void Pacman::off()
+{
+    SDL_DestroyTexture(texture);
+    texture = nullptr;
+    SDL_DestroyRenderer(renderer);
+    renderer = nullptr;
+    SDL_DestroyWindow(window);
+    window = nullptr;
+}
+
+bool Pacman::load(std::uint8_t* array, const std::string& path, const int addr, const int sz)
+{
+    std::ifstream file {path, std::ios::binary};
+
+    if (!file.is_open()) {
+        std::cout << std::format("error: can't open file '{:s}'.\n", path);
+        return false;
+    }
+
+    file.read(reinterpret_cast<char*>(array) + addr, sz);
+
+    if (file.bad()) {
+        std::cout << std::format("error [errno={:d}]: failed when reading file '{:s}'.\n", errno, path);
+        return false;
+    }
+
+    return true;
+}
+
 void Pacman::preload()
 {
     // load tiles
@@ -261,10 +235,10 @@ void Pacman::preload()
             const int lsb {byte & 0xF};
             const int coord {39 - j}; // first 4 bytes draw the bottom row
 
-            tile[coord + 24] = ((msb | lsb) & 0b0001U) >> 0U;
-            tile[coord + 16] = ((msb | lsb) & 0b0010U) >> 1U;
-            tile[coord + 8] = ((msb | lsb) & 0b0100U) >> 2U;
-            tile[coord + 0] = ((msb | lsb) & 0b1000U) >> 3U;
+            tile[coord + 24] = (((msb & 0b0001U) << 1U) | (lsb & 0b0001U)) >> 0U;
+            tile[coord + 16] = (((msb & 0b0010U) << 1U) | (lsb & 0b0010U)) >> 1U;
+            tile[coord + 8] = (((msb & 0b0100U) << 1U) | (lsb & 0b0100U)) >> 2U;
+            tile[coord + 0] = (((msb & 0b1000U) << 1U) | (lsb & 0b1000U)) >> 3U;
         }
 
         for (int j {0}; j != 8; ++j) {
@@ -273,14 +247,14 @@ void Pacman::preload()
             const int lsb {byte & 0xF};
             const int coord {7 - j}; // last 4 bytes draw the top row
 
-            tile[coord + 24] = ((msb | lsb) & 0b0001U) >> 0U;
-            tile[coord + 16] = ((msb | lsb) & 0b0010U) >> 1U;
-            tile[coord + 8] = ((msb | lsb) & 0b0100U) >> 2U;
-            tile[coord + 0] = ((msb | lsb) & 0b1000U) >> 3U;
+            tile[coord + 24] = (((msb & 0b0001U) << 1U) | (lsb & 0b0001U)) >> 0U;
+            tile[coord + 16] = (((msb & 0b0010U) << 1U) | (lsb & 0b0010U)) >> 1U;
+            tile[coord + 8] = (((msb & 0b0100U) << 1U) | (lsb & 0b0100U)) >> 2U;
+            tile[coord + 0] = (((msb & 0b1000U) << 1U) | (lsb & 0b1000U)) >> 3U;
         }
     }
 
-    /**
+    /*
     for (const Tile& tile : tiles) {
         for (int i {0}; i != 8; ++i) {
             for (int j {0}; j != 8; ++j) {
@@ -289,33 +263,26 @@ void Pacman::preload()
             std::cout << '\n';
         }
         std::cout << std::endl;
-    }*/
-
-    // load colors
-    for (int i {0}; i != colors.size(); ++i) {
-        const std::uint8_t byte {colorRom[i]};
-        std::uint8_t r {static_cast<uint8_t>(
-                                (((byte >> 0U) & 0b1) * 0x21)
-                                + (((byte >> 1U) & 0b1) * 0x47)
-                                + (((byte >> 2U) & 0b1) * 0x97))};
-        std::uint8_t g {static_cast<uint8_t>(
-                                (((byte >> 3U) & 0b1) * 0x21)
-                                + (((byte >> 4U) & 0b1) * 0x47)
-                                + (((byte >> 5U) & 0b1) * 0x97))};
-        std::uint8_t b {static_cast<uint8_t>(
-                                (((byte >> 6U) & 0b1) * 0x51)
-                                + (((byte >> 7U) & 0b1) * 0xAE))};
-
-        // color format is ABGR (alpha,blue,green,red)
-        colors[i] = (0xFF << 24U) | (b << 16U) | (g << 8U) | (r << 0U);
     }
+    */
 
     // load palettes
     for (int i {0}; i != palettes.size(); ++i) {
         Palette& palette {palettes[i]};
         for (int j {0}; j != 4; ++j) {
-            const std::uint8_t byte {static_cast<uint8_t>(paletteRom[j + (i * 4)] & 0x0F)};
-            palette[j] = &colors[byte];
+            const std::uint8_t color {colorRom[paletteRom[j + (i * 4)] & 0x0F]};
+            std::uint8_t r {static_cast<uint8_t>(
+                                    (((color >> 0U) & 0b1) * 0x21)
+                                    + (((color >> 1U) & 0b1) * 0x47)
+                                    + (((color >> 2U) & 0b1) * 0x97))};
+            std::uint8_t g {static_cast<uint8_t>(
+                                    (((color >> 3U) & 0b1) * 0x21)
+                                    + (((color >> 4U) & 0b1) * 0x47)
+                                    + (((color >> 5U) & 0b1) * 0x97))};
+            std::uint8_t b {static_cast<uint8_t>(
+                                    (((color >> 6U) & 0b1) * 0x51)
+                                    + (((color >> 7U) & 0b1) * 0xAE))};
+            palette[j] = (0xFF << 24U) | (b << 16U) | (g << 8U) | (r << 0U);
         }
     }
 }

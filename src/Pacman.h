@@ -14,8 +14,7 @@ class Pacman {
 public:
     using Z80 = z80<Pacman>;
     using Tile = std::uint8_t[64];
-    using Color = std::uint32_t;
-    using Palette = Color*[4];
+    using Palette = std::uint32_t[4];
 
     // Constructor (also sets the active boolean).
     explicit Pacman(std::uint8_t ds);
@@ -91,10 +90,8 @@ private:
     static constexpr std::uint8_t coin2 {0b01000000U};
     static constexpr std::uint8_t twoPlayer {0b01000000U};
     static constexpr std::uint8_t credit {0b10000000U};
-    static constexpr std::uint8_t cabinet {};
 
     // display constants
-    static constexpr std::uint32_t black {0xFF000000U};
     static constexpr int screenWidth {224};
     static constexpr int screenHeight {288};
     static constexpr int scaleFactor {3};
@@ -149,7 +146,6 @@ private:
     std::uint8_t spriteRom[0x1000] {};
 
     std::array<Tile, 256> tiles {};
-    std::array<Color, 16> colors {};
     std::array<Palette, 32> palettes {};
 };
 
