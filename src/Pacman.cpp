@@ -34,12 +34,12 @@ bool load(std::uint8_t* array, const std::string& path, const int addr, const in
  * @param rom pointer to array of bytes
  * @param array where to put the decoded pixels
  * @param imageNum how many images have been decoded before this call (i.e. 0, 1, 2, ..., n)
- * @param pitch how many pixels per row in the image
  * @param stripNum how many strips have been decoded before this call (i.e. 0, 1, 2, ..., n)
+ * @param pitch how many pixels per row in the image
  * @param x the coordinate of the strip's top-left corner on the x-axis
  * @param y the coordinate of the strip's top left corner on the y-axis
  */
-void decodeStrip(const std::uint8_t* rom, std::uint8_t* array, const int imageNum, const int pitch, const int stripNum, const int x, const int y)
+void decodeStrip(const std::uint8_t* rom, std::uint8_t* array, const int imageNum, const int stripNum, const int pitch, const int x, const int y)
 {
     for (int j {0}; j != 8; ++j) {
         const std::uint8_t byte {rom[j + (stripNum * 8) + (imageNum * pitch * (pitch / 8 * 2))]};
@@ -313,22 +313,22 @@ bool Pacman::preload(const std::string& dir)
     for (int i {0}; i != tiles.size(); ++i) {
         Tile& tile {tiles[i]};
 
-        decodeStrip(tileRom, tile, i, 8, 0, 0, 1);
-        decodeStrip(tileRom, tile, i, 8, 1, 0, 0);
+        decodeStrip(tileRom, tile, i, 0, 8, 0, 1);
+        decodeStrip(tileRom, tile, i, 1, 8, 0, 0);
     }
 
     // decode sprites
     for (int i {0}; i != sprites.size(); ++i) {
         Sprite& sprite {sprites[i]};
 
-        decodeStrip(spriteRom, sprite, i, 16, 0, 1, 3);
-        decodeStrip(spriteRom, sprite, i, 16, 1, 1, 0);
-        decodeStrip(spriteRom, sprite, i, 16, 2, 1, 1);
-        decodeStrip(spriteRom, sprite, i, 16, 3, 1, 2);
-        decodeStrip(spriteRom, sprite, i, 16, 4, 0, 3);
-        decodeStrip(spriteRom, sprite, i, 16, 5, 0, 0);
-        decodeStrip(spriteRom, sprite, i, 16, 6, 0, 1);
-        decodeStrip(spriteRom, sprite, i, 16, 7, 0, 2);
+        decodeStrip(spriteRom, sprite, i, 0, 16, 1, 3);
+        decodeStrip(spriteRom, sprite, i, 1, 16, 1, 0);
+        decodeStrip(spriteRom, sprite, i, 2, 16, 1, 1);
+        decodeStrip(spriteRom, sprite, i, 3, 16, 1, 2);
+        decodeStrip(spriteRom, sprite, i, 4, 16, 0, 3);
+        decodeStrip(spriteRom, sprite, i, 5, 16, 0, 0);
+        decodeStrip(spriteRom, sprite, i, 6, 16, 0, 1);
+        decodeStrip(spriteRom, sprite, i, 7, 16, 0, 2);
     }
 
     return true;
