@@ -45,10 +45,10 @@ void decodeStrip(const std::uint8_t* rom, std::uint8_t* array, const int imageNu
         const std::uint8_t byte {rom[j + (stripNum * 8) + (imageNum * pitch * (pitch / 8 * 2))]};
         const int px {(y * pitch * 4) + ((x + 1) * 8 - 1) - j};
 
-        array[px + pitch*3] = ((byte & 0x10) >> 3U) | ((byte & 0x01U) >> 0U);
-        array[px + pitch*2] = ((byte & 0x20) >> 4U) | ((byte & 0x02U) >> 1U);
-        array[px + pitch*1] = ((byte & 0x40) >> 5U) | ((byte & 0x04U) >> 2U);
-        array[px + pitch*0] = ((byte & 0x80) >> 6U) | ((byte & 0x08U) >> 3U);
+        array[px + pitch * 3] = ((byte & 0x10) >> 3U) | ((byte & 0x01U) >> 0U);
+        array[px + pitch * 2] = ((byte & 0x20) >> 4U) | ((byte & 0x02U) >> 1U);
+        array[px + pitch * 1] = ((byte & 0x40) >> 5U) | ((byte & 0x04U) >> 2U);
+        array[px + pitch * 0] = ((byte & 0x80) >> 6U) | ((byte & 0x08U) >> 3U);
     }
 }
 
