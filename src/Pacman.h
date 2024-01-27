@@ -84,7 +84,7 @@ private:
     static constexpr std::uint8_t left {0b00000010U};
     static constexpr std::uint8_t right {0b00000100U};
     static constexpr std::uint8_t down {0b00001000U};
-    static constexpr std::uint8_t skip {0b00010000U};
+    static constexpr std::uint8_t rackAdvance {0b00010000U};
     static constexpr std::uint8_t test {0b00010000U};
     static constexpr std::uint8_t coin1 {0b00100000U};
     static constexpr std::uint8_t onePlayer {0b00100000U};
@@ -108,11 +108,13 @@ private:
 
     /**
      * Draws a sprite decoded from the sprite rom.
-     * @param loc
+     * @param loc selects the sprite from sprite ram
      * @param x the x coordinate [0,27] (sprite's upper left corner)
      * @param y the y coordinate [0,35] (sprite's upper left corner)
+     * @param xflip if true flips the sprite horizontally
+     * @param yflip if true flips the sprite vertically
      */
-    void drawSprite(int loc, int x, int y);
+    void drawSprite(int loc, int x, int y, bool xflip, bool yflip);
 
     /**
      * Initializes SDL2 objects.
@@ -138,7 +140,7 @@ private:
     bool preload(const std::string& dir);
 
     const std::uint8_t dipswitch; // game settings
-    std::uint8_t input0 {}, input1 {0b10000000U}; // setting cabinet mode to upright
+    std::uint8_t input0 {}, input1 {0b10010000U}; // default cabinet mode is upright and board test is off
     bool soundEnabled {false}, flipScreen {false};
 
     std::uint32_t rasterBuffer[screenHeight][screenWidth] {};
@@ -148,10 +150,10 @@ private:
 
     /**
      * 0x0000-0x4000: 16384 game rom
-     * 0x4000-0x43FF: 1024 vram (tile information)
-     * 0x4400-0x47FF: 1024 vram (tile palettes)
+     * 0x4000-0x43FF: 1024 video ram
+     * 0x4400-0x47FF: 1024 color ram
      * 0x4800-0x4FEF: 2032 ram
-     * 0x4FF0-0x4FFF: 16 sprite #
+     * 0x4FF0-0x4FFF: 16 sprite ram
      */
     std::uint8_t rom[0x4000] {};
     std::uint8_t ram[0x1000] {};

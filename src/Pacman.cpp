@@ -21,10 +21,8 @@ std::uint8_t Pacman::read8(std::uint16_t addr) const
     if (addr < 0x4000) {
         return rom[addr];
     } else if (addr < 0x5000) {
-        if (addr - 0x4000 < 0 or addr - 0x4000 >= 0x1000)
-            std::cout << std::format("READ RAM: {:0>4X}\n", addr - 0x4000);
         return ram[addr - 0x4000];
-    } else if (addr < 0x5100) { // IO
+    } else if (addr < 0x5100) { // Memory Mapped Registers
         if (addr == 0x5003) {
             return flipScreen;
         } else if (0x5007 < addr and addr < 0x5040) { // IN0 (joystick and coin slot)
@@ -35,7 +33,7 @@ std::uint8_t Pacman::read8(std::uint16_t addr) const
             return dipswitch;
         }
     } else {
-        std::cout << std::format("error: attempt to read at {:0>4X}\n", addr);
+        SDL_Log("error: attempt to read at %04X\n", addr);
     }
     return 0xFF;
 }
@@ -45,12 +43,10 @@ void Pacman::write8(std::uint16_t addr, const std::uint8_t val)
     addr &= 0x7FFFU;
 
     if (addr < 0x4000) {
-        std::cout << std::format("error: attempt to write to rom {:0>2X} at {:0>4X}\n", val, addr);
+        SDL_Log("error: attempt to write to rom %02X at %04X\n", val, addr);
     } else if (addr < 0x5000) {
-        if (addr - 0x4000 < 0 or addr - 0x4000 >= 0x1000)
-            std::cout << std::format("WRITE RAM: {:0>2X} at {:0>4X}\n", val, addr - 0x4000);
         ram[addr - 0x4000] = val;
-    } else if (addr < 0x5100) { // IO
+    } else if (addr < 0x5100) { // Memory Mapped Registers
         /**
          * Registers not used in Pac-Man:
          * 0x5002: ??? Aux board enable?
@@ -72,37 +68,19 @@ void Pacman::write8(std::uint16_t addr, const std::uint8_t val)
             spritePos[addr - 0x5060] = val;
         }
     } else {
-        std::cout << std::format("error: attempt to write {:0>2X} at {:0>4X}\n", val, addr);
+        SDL_Log("error: attempt to write %02X at %04X\n", val, addr);
     }
 }
 
 void Pacman::onKeyDown(SDL_Scancode scancode)
 {
     switch (scancode) {
-        case SDL_SCANCODE_UP: input0 |= up; input1 |= up; break;
-        case SDL_SCANCODE_LEFT: input0 |= left; input1 |= left; break;
-        case SDL_SCANCODE_RIGHT: input0 |= right; input1 |= right; break;
-        case SDL_SCANCODE_DOWN: input0 |= down; input1 |= down; break;
-        case SDL_SCANCODE_SPACE: input0 |= skip; break;
-        case SDL_SCANCODE_T: input1 |= test; break;
-        case SDL_SCANCODE_1: input0 |= coin1; break;
-        case SDL_SCANCODE_RETURN: input1 |= onePlayer; break;
-        case SDL_SCANCODE_2: input0 |= coin2; break;
-        case SDL_SCANCODE_P: input1 |= twoPlayer; break;
-        case SDL_SCANCODE_C: input0 |= credit; break;
-        default: break;
-    }
-}
-
-void Pacman::onKeyUp(SDL_Scancode scancode)
-{
-    switch (scancode) {
         case SDL_SCANCODE_UP: input0 &= ~up; input1 &= ~up; break;
         case SDL_SCANCODE_LEFT: input0 &= ~left; input1 &= ~left; break;
         case SDL_SCANCODE_RIGHT: input0 &= ~right; input1 &= ~right; break;
         case SDL_SCANCODE_DOWN: input0 &= ~down; input1 &= ~down; break;
-        case SDL_SCANCODE_SPACE: input0 &= ~skip; break;
-        case SDL_SCANCODE_T: input1 &= ~test; break;
+        //case SDL_SCANCODE_SPACE: input0 &= ~skip; break;
+        //case SDL_SCANCODE_T: input1 &= ~test; break;
         case SDL_SCANCODE_1: input0 &= ~coin1; break;
         case SDL_SCANCODE_RETURN: input1 &= ~onePlayer; break;
         case SDL_SCANCODE_2: input0 &= ~coin2; break;
@@ -112,20 +90,47 @@ void Pacman::onKeyUp(SDL_Scancode scancode)
     }
 }
 
-void Pacman::drawTile(const int loc, const int x, const int y)
+void Pacman::onKeyUp(SDL_Scancode scancode)
 {
-    const Tile& tile {tiles[ram[loc]]};
-    const Palette& palette {palettes[ram[loc + 0x400] & 0x0F]};
-
-    for (int i {0}; i != 8; ++i) {
-        for (int j {0}; j != 8; ++j)
-            rasterBuffer[y*8 + i][x*8 + j] = palette[tile[j + (i * 8)]];
+    switch (scancode) {
+        case SDL_SCANCODE_UP: input0 |= up; input1 |= up; break;
+        case SDL_SCANCODE_LEFT: input0 |= left; input1 |= left; break;
+        case SDL_SCANCODE_RIGHT: input0 |= right; input1 |= right; break;
+        case SDL_SCANCODE_DOWN: input0 |= down; input1 |= down; break;
+        case SDL_SCANCODE_SPACE: input0 ^= rackAdvance; break; // switch 0=on, 1=off
+        case SDL_SCANCODE_T: input1 ^= test; break; // switch 0=on, 1=off
+        case SDL_SCANCODE_1: input0 |= coin1; break;
+        case SDL_SCANCODE_RETURN: input1 |= onePlayer; break;
+        case SDL_SCANCODE_2: input0 |= coin2; break;
+        case SDL_SCANCODE_P: input1 |= twoPlayer; break;
+        case SDL_SCANCODE_C: input0 |= credit; break;
+        default: break;
     }
 }
 
-void Pacman::drawSprite(int loc, int x, int y)
+void Pacman::drawTile(const int loc, const int x, const int y)
 {
+    const Tile& tile {tiles[ram[loc]]};
+    const Palette& palette {palettes[ram[loc + 0x400] & 0x3F]};
 
+    for (int i {0}; i != 8; ++i) {
+        for (int j {0}; j != 8; ++j)
+            rasterBuffer[y*8 + i][x*8 + j] = palette[tile[j + (i << 3)]];
+    }
+}
+
+void Pacman::drawSprite(const int loc, const int x, const int y, const bool xflip, const bool yflip)
+{
+    if (x > screenWidth or y > screenHeight) return;
+
+    const Sprite& sprite {sprites[ram[loc >> 2]]};
+    const Palette& palette {palettes[ram[loc + 1] & 0x3F]};
+
+    for (int i {0}; i != 16; ++i) {
+        for (int j {0}; j != 16; ++j) {
+            rasterBuffer[y + (xflip ? 15 - i : i)][x + (yflip ? 15 - j : j)] = palette[sprite[j + (i << 4)]];
+        }
+    }
 }
 
 void Pacman::draw()
@@ -148,6 +153,11 @@ void Pacman::draw()
             drawTile(960 + x + (y * 32), 29 - x, y);
     }
 
+    // sprites
+    for (int i {0}, n {0}; i != 8; ++i)
+        drawSprite(i * 2 + 0x4FF0, screenWidth - spritePos[i * 2] + 15, screenHeight - spritePos[i * 2 + 1] - 16, (i * 2 + 0x4FF0) & 0b10, (i * 2 + 0x4FF0) & 0b01);
+
+
     SDL_UpdateTexture(texture, nullptr, rasterBuffer, pitch);
     SDL_RenderClear(renderer);
     SDL_RenderCopy(renderer, texture, nullptr, nullptr);
@@ -165,13 +175,13 @@ bool Pacman::initVideo()
             screenHeight * scaleFactor,
             SDL_WINDOW_SHOWN);
     if (!window) {
-        std::cout << std::format("SDL_CreateWindow() failed. SDL_Error: {:s}\n", SDL_GetError());
+        SDL_Log("SDL_CreateWindow() failed. SDL_Error: %s\n", SDL_GetError());
         return false;
     }
 
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_PRESENTVSYNC);
     if (!renderer){
-        std::cout << std::format("SDL_CreateRenderer() failed. SDL_Error: {:s}\n", SDL_GetError());
+        SDL_Log("SDL_CreateRenderer() failed. SDL_Error: %s\n", SDL_GetError());
         return false;
     }
 
@@ -180,7 +190,7 @@ bool Pacman::initVideo()
                                 SDL_TEXTUREACCESS_STREAMING,
                                 screenWidth, screenHeight);
     if (!texture){
-        std::cout << std::format("SDL_CreateTexture() failed. SDL_Error: {:s}\n", SDL_GetError());
+        SDL_Log("SDL_CreateTexture() failed. SDL_Error: %s\n", SDL_GetError());
         return false;
     }
 
@@ -209,14 +219,14 @@ bool Pacman::load(std::uint8_t* array, const std::string& path, const int addr, 
     std::ifstream file {path, std::ios::binary};
 
     if (!file.is_open()) {
-        std::cout << std::format("error: can't open file '{:s}'.\n", path);
+        SDL_Log("error: can't open file '%s'.\n", path.c_str());
         return false;
     }
 
     file.read(reinterpret_cast<char*>(array) + addr, sz);
 
     if (file.bad()) {
-        std::cout << std::format("error [errno={:d}]: failed when reading file '{:s}'.\n", errno, path);
+        SDL_Log("error [errno=%d]: failed when reading file '%s'.\n", errno, path.c_str());
         return false;
     }
 
@@ -385,18 +395,6 @@ bool Pacman::preload(const std::string& dir)
             sprite[coord + 0] = (((msb & 0b1000U) << 1U) | (lsb & 0b1000U)) >> 3U;
         }
     }
-
-    /*
-    for (const Sprite& sprite : sprites) {
-        for (int i {0}; i != 16; ++i) {
-            for (int j {0}; j != 16; ++j) {
-                std::cout << (sprite[j + (i * 16)] ? 'X' : ' ') << "  ";
-            }
-            std::cout << '\n';
-        }
-        std::cout << std::endl;
-    }
-     */
 
     return true;
 }
