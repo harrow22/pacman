@@ -134,11 +134,13 @@ private:
     SDL_Texture* texture {nullptr};
 
     std::uint8_t rom[0x4000] {};
-    std::uint8_t tileRam[0x400] {};
-    std::uint8_t paletteRam[0x400] {};
-    std::uint8_t ram[0x7F0] {};
+    /**
+     * 0x4000 - 0x43FF: 1024 vram (tile information)
+     * 0x4400 - 0x47FF: 1024 vram (tile palettes)
+     * 0x4800 - 0x4FEF: 2032 ram
+     */
+    std::uint8_t ram[0x1000] {};
     std::uint8_t spriteNum[0x10] {};
-    std::uint8_t io[0x100] {};
 
     std::uint8_t colorRom[0x20] {};
     std::uint8_t paletteRom[0x100] {};

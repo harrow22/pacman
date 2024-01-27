@@ -18,18 +18,20 @@ Pacman::Pacman(const std::uint8_t ds) : dipswitch{ds}
     if (active) preload();
 }
 
-std::uint8_t Pacman::read8(const std::uint16_t addr) const
+std::uint8_t Pacman::read8(std::uint16_t addr) const
 {
+    addr &= 0x7FFFU;
+
     if (addr < 0x4000) {
         return rom[addr];
-    } else if (addr < 0x4400) {
-        return tileRam[addr - 0x4000];
-    } else if (addr < 0x4800) {
-        return paletteRam[addr - 0x4400];
-    } else if (addr < 0x4FF0) {
-        return ram[addr - 0x4800];
+    } else if (addr < 0x5000) {
+        if (addr - 0x4000 < 0 or addr - 0x4000 >= 0x1000)
+            std::cout << std::format("READ RAM: {:0>4X}\n", addr - 0x4000);
+        return ram[addr - 0x4000];
     } else if (addr < 0x5100) { // IO
-        if (addr < 0x5040) { // IN0 (joystick and coin slot)
+        if (addr == 0x5003) {
+            return flipScreen;
+        } else if (0x5007 < addr and addr < 0x5040) { // IN0 (joystick and coin slot)
             return input0;
         } else if (addr < 0x5080) { // IN1 (joystick and start buttons)
             return input1;
@@ -39,22 +41,19 @@ std::uint8_t Pacman::read8(const std::uint16_t addr) const
     } else {
         std::cout << std::format("error: attempt to read at {:0>4X}\n", addr);
     }
-    return 0;
+    return 0xFF;
 }
 
-void Pacman::write8(const std::uint16_t addr, const std::uint8_t val)
+void Pacman::write8(std::uint16_t addr, const std::uint8_t val)
 {
-    if (addr < 0x4000) {
-        std::cout << std::format("error: attempt to write {:0>2X} at {:0>4X}\n", val, addr);
-        return;
-    }
+    addr &= 0x7FFFU;
 
-    if (addr < 0x4400) {
-        tileRam[addr - 0x4000] = val;
-    } else if (addr < 0x4800) {
-        paletteRam[addr - 0x4400] = val;
-    } else if (addr < 0x4FF0) {
-        ram[addr - 0x4800] = val;
+    if (addr < 0x4000) {
+        std::cout << std::format("error: attempt to write to rom {:0>2X} at {:0>4X}\n", val, addr);
+    } else if (addr < 0x5000) {
+        if (addr - 0x4000 < 0 or addr - 0x4000 >= 0x1000)
+            std::cout << std::format("WRITE RAM: {:0>2X} at {:0>4X}\n", val, addr - 0x4000);
+        ram[addr - 0x4000] = val;
     } else if (addr < 0x5100) { // IO
         /**
          * Registers not used in Pac-Man:
@@ -119,12 +118,14 @@ void Pacman::onKeyUp(SDL_Scancode scancode)
 
 void Pacman::drawTile(const int loc, const int x, const int y)
 {
-    Tile& tile {tiles[tileRam[loc]]};
-    Palette& palette {palettes[paletteRam[loc]]};
+    const Tile& tile {tiles[ram[loc]]};
+    const Palette& palette {palettes[ram[loc + 0x400] & 0x0F]};
 
     for (int i {0}; i != 8; ++i) {
-        for (int j {0}; j != 8; ++j)
-            rasterBuffer[x*8 + j][y*8 + i] = palette[tile[j + (i * 8)]];
+        for (int j {0}; j != 8; ++j) {
+            //std::cout << std::format("(x={:d},y={:d}), (px={:d},py={:d}), loc={:d}, tile_no={:d}, palette_no={:d}, pixel={:d}, color={:0>8X}\n", x, y, x*8 + j, y*8 + i, loc, ram[loc], ram[loc + 0x400], tile[j+(i*8)], palette[tile[j + (i * 8)]]);
+            rasterBuffer[y*8 + i][x*8 + j] = palette[tile[j + (i * 8)]];
+        }
     }
 }
 
@@ -138,9 +139,8 @@ void Pacman::draw()
 
     // middle of screen
     for (int x {0}; x != 28; ++x) {
-        for (int y {0}; y != 32; ++y) {
-            drawTile(64 + y + (x * 28), 27 - x, y + 2);
-        }
+        for (int y {0}; y != 32; ++y)
+            drawTile(64 + y + (x * 32), 27 - x, y + 2);
     }
 
     // top of screen
@@ -172,7 +172,7 @@ bool Pacman::initVideo()
 
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_PRESENTVSYNC);
     if (!renderer){
-        std::cout << std::format("SDL_CreateWindow() failed. SDL_Error: {:s}\n", SDL_GetError());
+        std::cout << std::format("SDL_CreateRenderer() failed. SDL_Error: {:s}\n", SDL_GetError());
         return false;
     }
 
@@ -181,7 +181,7 @@ bool Pacman::initVideo()
                                 SDL_TEXTUREACCESS_STREAMING,
                                 screenWidth, screenHeight);
     if (!texture){
-        std::cout << std::format("SDL_CreateWindow() failed. SDL_Error: {:s}\n", SDL_GetError());
+        std::cout << std::format("SDL_CreateTexture() failed. SDL_Error: {:s}\n", SDL_GetError());
         return false;
     }
 
@@ -197,11 +197,11 @@ bool Pacman::initVideo()
 
 void Pacman::off()
 {
-    SDL_DestroyTexture(texture);
+    if (texture != nullptr) SDL_DestroyTexture(texture);
     texture = nullptr;
-    SDL_DestroyRenderer(renderer);
+    if (renderer != nullptr) SDL_DestroyRenderer(renderer);
     renderer = nullptr;
-    SDL_DestroyWindow(window);
+    if (window != nullptr) SDL_DestroyWindow(window);
     window = nullptr;
 }
 
@@ -253,18 +253,6 @@ void Pacman::preload()
             tile[coord + 0] = (((msb & 0b1000U) << 1U) | (lsb & 0b1000U)) >> 3U;
         }
     }
-
-    /*
-    for (const Tile& tile : tiles) {
-        for (int i {0}; i != 8; ++i) {
-            for (int j {0}; j != 8; ++j) {
-                std::cout << (tile[j + (i * 8)] ? '*' : ' ') << ' ';
-            }
-            std::cout << '\n';
-        }
-        std::cout << std::endl;
-    }
-    */
 
     // load palettes
     for (int i {0}; i != palettes.size(); ++i) {
