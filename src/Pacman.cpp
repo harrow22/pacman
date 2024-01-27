@@ -1,7 +1,58 @@
 #include "Pacman.h"
-#include <format>
 #include <fstream>
 #include <iostream>
+
+/**
+ * For loading a binary ROM file.
+ * @param array a pointer to where to dump the file's contents
+ * @param path path to the file
+ * @param addr base address to start reading the file from
+ * @param sz size of the array
+ * @return true if there were no errors opening/reading the file; false otherwise
+ */
+bool load(std::uint8_t* array, const std::string& path, const int addr, const int sz)
+{
+    std::ifstream file {path, std::ios::binary};
+
+    if (!file.is_open()) {
+        SDL_Log("error: can't open file '%s'.\n", path.c_str());
+        return false;
+    }
+
+    file.read(reinterpret_cast<char*>(array) + addr, sz);
+
+    if (file.bad()) {
+        SDL_Log("error [errno=%d]: failed when reading file '%s'.\n", errno, path.c_str());
+        return false;
+    }
+
+    return true;
+}
+
+/**
+ * Decodes a strip of pixels for a tile or sprite. The word 'image' here refers to either a tile or sprite.
+ * @param rom pointer to array of bytes
+ * @param array where to put the decoded pixels
+ * @param imageNum how many images have been decoded before this call (i.e. 0, 1, 2, ..., n)
+ * @param pitch how many pixels per row in the image
+ * @param stripNum how many strips have been decoded before this call (i.e. 0, 1, 2, ..., n)
+ * @param x the coordinate of the strip's top-left corner on the x-axis
+ * @param y the coordinate of the strip's top left corner on the y-axis
+ */
+void decodeStrip(const std::uint8_t* rom, std::uint8_t* array, const int imageNum, const int pitch, const int stripNum, const int x, const int y)
+{
+    for (int j {0}; j != 8; ++j) {
+        const std::uint8_t byte {rom[j + (stripNum * 8) + (imageNum * pitch * (pitch / 8 * 2))]};
+        const int msb {byte >> 4U};
+        const int lsb {byte & 0xF};
+        const int coord {(y * pitch * 4) + ((x + 1) * 8 - 1) - j};
+
+        array[coord + pitch*3] = (((msb & 0b0001U) << 1U) | (lsb & 0b0001U)) >> 0U;
+        array[coord + pitch*2] = (((msb & 0b0010U) << 1U) | (lsb & 0b0010U)) >> 1U;
+        array[coord + pitch*1] = (((msb & 0b0100U) << 1U) | (lsb & 0b0100U)) >> 2U;
+        array[coord + pitch*0] = (((msb & 0b1000U) << 1U) | (lsb & 0b1000U)) >> 3U;
+    }
+}
 
 Pacman::Pacman(const std::uint8_t ds) : dipswitch{ds}
 {
@@ -87,8 +138,6 @@ void Pacman::onKeyDown(SDL_Scancode scancode)
         case SDL_SCANCODE_LEFT: input0 &= ~left; input1 &= ~left; break;
         case SDL_SCANCODE_RIGHT: input0 &= ~right; input1 &= ~right; break;
         case SDL_SCANCODE_DOWN: input0 &= ~down; input1 &= ~down; break;
-        //case SDL_SCANCODE_SPACE: input0 &= ~skip; break;
-        //case SDL_SCANCODE_T: input1 &= ~test; break;
         case SDL_SCANCODE_1: input0 &= ~coin1; break;
         case SDL_SCANCODE_RETURN: input1 &= ~onePlayer; break;
         case SDL_SCANCODE_2: input0 &= ~coin2; break;
@@ -130,17 +179,16 @@ void Pacman::drawTile(const int loc, const int x, const int y)
 void Pacman::drawSprite(const int loc, const int x, const int y)
 {
     if (x > screenWidth or y > screenHeight) return;
-    const std::uint8_t byte0 {ram[loc - 0x4000]};
-    const bool xflip {static_cast<bool>(byte0 & 0b10)}, yflip {static_cast<bool>(byte0 & 0b01)};
-
+    const std::uint8_t byte0 {ram[loc]}; // upper 6 bits are the sprite #, bit 1 is flip-x, bit 0 is flip-y
     const Sprite& sprite {sprites[byte0 >> 2]};
-    const Palette& palette {palettes[ram[loc + 1 - 0x4000] & 0x3F]};
+    const Palette& palette {palettes[ram[loc + 1] & 0x3F]};
+    const bool flipX {static_cast<bool>(byte0 & 0b10)}, flipY {static_cast<bool>(byte0 & 0b01)};
 
     for (int i {0}; i != 16; ++i) {
         for (int j {0}; j != 16; ++j) {
-            if (palette[sprite[j + (i << 4)]] == 0xFF000000)
-                continue;
-            rasterBuffer[y + (yflip ? 15 - i : i)][x + (xflip ? 15 - j : j)] = palette[sprite[j + (i << 4)]];
+            const std::uint32_t color {palette[sprite[j + (i << 4)]]};
+            if (color == black) continue;
+            rasterBuffer[y + (flipY ? 15 - i : i)][x + (flipX ? 15 - j : j)] = color;
         }
     }
 }
@@ -167,7 +215,8 @@ void Pacman::draw()
 
     // sprites (drawn in reverse order)
     for (int i {7}; i != -1; --i) {
-        drawSprite(i * 2 + 0x4FF0, screenWidth - spritePos[i * 2] + 15, screenHeight - spritePos[i * 2 + 1] - 16);
+        const int n {i * 2}; // step by 2
+        drawSprite(n + 0xFF0, screenWidth - spritePos[n] + 15, screenHeight - spritePos[n + 1] - 16);
     }
 
     SDL_UpdateTexture(texture, nullptr, rasterBuffer, pitch);
@@ -226,25 +275,6 @@ void Pacman::off()
     window = nullptr;
 }
 
-bool Pacman::load(std::uint8_t* array, const std::string& path, const int addr, const int sz)
-{
-    std::ifstream file {path, std::ios::binary};
-
-    if (!file.is_open()) {
-        SDL_Log("error: can't open file '%s'.\n", path.c_str());
-        return false;
-    }
-
-    file.read(reinterpret_cast<char*>(array) + addr, sz);
-
-    if (file.bad()) {
-        SDL_Log("error [errno=%d]: failed when reading file '%s'.\n", errno, path.c_str());
-        return false;
-    }
-
-    return true;
-}
-
 bool Pacman::preload(const std::string& dir)
 {
     std::uint8_t colorRom[0x20] {};
@@ -282,130 +312,23 @@ bool Pacman::preload(const std::string& dir)
     // decode tiles
     for (int i {0}; i != tiles.size(); ++i) {
         Tile& tile {tiles[i]};
-        for (int j {0}; j != 8; ++j) {
-            const std::uint8_t byte {tileRom[j + (i * 16)]};
-            const int msb {byte >> 4U};
-            const int lsb {byte & 0xF};
-            const int coord {39 - j}; // first 4 bytes draw the bottom row
 
-            tile[coord + 24] = (((msb & 0b0001U) << 1U) | (lsb & 0b0001U)) >> 0U;
-            tile[coord + 16] = (((msb & 0b0010U) << 1U) | (lsb & 0b0010U)) >> 1U;
-            tile[coord + 8] = (((msb & 0b0100U) << 1U) | (lsb & 0b0100U)) >> 2U;
-            tile[coord + 0] = (((msb & 0b1000U) << 1U) | (lsb & 0b1000U)) >> 3U;
-        }
-
-        for (int j {0}; j != 8; ++j) {
-            const std::uint8_t byte {tileRom[j + 8 + (i * 16)]};
-            const int msb {byte >> 4U};
-            const int lsb {byte & 0xF};
-            const int coord {7 - j}; // last 4 bytes draw the top row
-
-            tile[coord + 24] = (((msb & 0b0001U) << 1U) | (lsb & 0b0001U)) >> 0U;
-            tile[coord + 16] = (((msb & 0b0010U) << 1U) | (lsb & 0b0010U)) >> 1U;
-            tile[coord + 8] = (((msb & 0b0100U) << 1U) | (lsb & 0b0100U)) >> 2U;
-            tile[coord + 0] = (((msb & 0b1000U) << 1U) | (lsb & 0b1000U)) >> 3U;
-        }
+        decodeStrip(tileRom, tile, i, 8, 0, 0, 1);
+        decodeStrip(tileRom, tile, i, 8, 1, 0, 0);
     }
 
     // decode sprites
     for (int i {0}; i != sprites.size(); ++i) {
         Sprite& sprite {sprites[i]};
 
-        for (int j {0}; j != 8; ++j) {
-            const std::uint8_t byte {spriteRom[j + (i * 64)]};
-            const int msb {byte >> 4U};
-            const int lsb {byte & 0xF};
-            const int coord {207 - j};
-
-            sprite[coord + 48] = (((msb & 0b0001U) << 1U) | (lsb & 0b0001U)) >> 0U;
-            sprite[coord + 32] = (((msb & 0b0010U) << 1U) | (lsb & 0b0010U)) >> 1U;
-            sprite[coord + 16] = (((msb & 0b0100U) << 1U) | (lsb & 0b0100U)) >> 2U;
-            sprite[coord + 0] = (((msb & 0b1000U) << 1U) | (lsb & 0b1000U)) >> 3U;
-        }
-
-        for (int j {0}; j != 8; ++j) {
-            const std::uint8_t byte {spriteRom[j + 8 + (i * 64)]};
-            const int msb {byte >> 4U};
-            const int lsb {byte & 0xF};
-            const int coord {15 - j};
-
-            sprite[coord + 48] = (((msb & 0b0001U) << 1U) | (lsb & 0b0001U)) >> 0U;
-            sprite[coord + 32] = (((msb & 0b0010U) << 1U) | (lsb & 0b0010U)) >> 1U;
-            sprite[coord + 16] = (((msb & 0b0100U) << 1U) | (lsb & 0b0100U)) >> 2U;
-            sprite[coord + 0] = (((msb & 0b1000U) << 1U) | (lsb & 0b1000U)) >> 3U;
-        }
-
-        for (int j {0}; j != 8; ++j) {
-            const std::uint8_t byte {spriteRom[j + 16 + (i * 64)]};
-            const int msb {byte >> 4U};
-            const int lsb {byte & 0xF};
-            const int coord {79 - j};
-
-            sprite[coord + 48] = (((msb & 0b0001U) << 1U) | (lsb & 0b0001U)) >> 0U;
-            sprite[coord + 32] = (((msb & 0b0010U) << 1U) | (lsb & 0b0010U)) >> 1U;
-            sprite[coord + 16] = (((msb & 0b0100U) << 1U) | (lsb & 0b0100U)) >> 2U;
-            sprite[coord + 0] = (((msb & 0b1000U) << 1U) | (lsb & 0b1000U)) >> 3U;
-        }
-
-        for (int j {0}; j != 8; ++j) {
-            const std::uint8_t byte {spriteRom[j + 24 + (i * 64)]};
-            const int msb {byte >> 4U};
-            const int lsb {byte & 0xF};
-            const int coord {143 - j};
-
-            sprite[coord + 48] = (((msb & 0b0001U) << 1U) | (lsb & 0b0001U)) >> 0U;
-            sprite[coord + 32] = (((msb & 0b0010U) << 1U) | (lsb & 0b0010U)) >> 1U;
-            sprite[coord + 16] = (((msb & 0b0100U) << 1U) | (lsb & 0b0100U)) >> 2U;
-            sprite[coord + 0] = (((msb & 0b1000U) << 1U) | (lsb & 0b1000U)) >> 3U;
-        }
-
-        for (int j {0}; j != 8; ++j) {
-            const std::uint8_t byte {spriteRom[j + 32 + (i * 64)]};
-            const int msb {byte >> 4U};
-            const int lsb {byte & 0xF};
-            const int coord {199 - j};
-
-            sprite[coord + 48] = (((msb & 0b0001U) << 1U) | (lsb & 0b0001U)) >> 0U;
-            sprite[coord + 32] = (((msb & 0b0010U) << 1U) | (lsb & 0b0010U)) >> 1U;
-            sprite[coord + 16] = (((msb & 0b0100U) << 1U) | (lsb & 0b0100U)) >> 2U;
-            sprite[coord + 0] = (((msb & 0b1000U) << 1U) | (lsb & 0b1000U)) >> 3U;
-        }
-
-        for (int j {0}; j != 8; ++j) {
-            const std::uint8_t byte {spriteRom[j + 40 + (i * 64)]};
-            const int msb {byte >> 4U};
-            const int lsb {byte & 0xF};
-            const int coord {7 - j};
-
-            sprite[coord + 48] = (((msb & 0b0001U) << 1U) | (lsb & 0b0001U)) >> 0U;
-            sprite[coord + 32] = (((msb & 0b0010U) << 1U) | (lsb & 0b0010U)) >> 1U;
-            sprite[coord + 16] = (((msb & 0b0100U) << 1U) | (lsb & 0b0100U)) >> 2U;
-            sprite[coord + 0] = (((msb & 0b1000U) << 1U) | (lsb & 0b1000U)) >> 3U;
-        }
-
-        for (int j {0}; j != 8; ++j) {
-            const std::uint8_t byte {spriteRom[j + 48 + (i * 64)]};
-            const int msb {byte >> 4U};
-            const int lsb {byte & 0xF};
-            const int coord {71 - j};
-
-            sprite[coord + 48] = (((msb & 0b0001U) << 1U) | (lsb & 0b0001U)) >> 0U;
-            sprite[coord + 32] = (((msb & 0b0010U) << 1U) | (lsb & 0b0010U)) >> 1U;
-            sprite[coord + 16] = (((msb & 0b0100U) << 1U) | (lsb & 0b0100U)) >> 2U;
-            sprite[coord + 0] = (((msb & 0b1000U) << 1U) | (lsb & 0b1000U)) >> 3U;
-        }
-
-        for (int j {0}; j != 8; ++j) {
-            const std::uint8_t byte {spriteRom[j + 56 + (i * 64)]};
-            const int msb {byte >> 4U};
-            const int lsb {byte & 0xF};
-            const int coord {135 - j};
-
-            sprite[coord + 48] = (((msb & 0b0001U) << 1U) | (lsb & 0b0001U)) >> 0U;
-            sprite[coord + 32] = (((msb & 0b0010U) << 1U) | (lsb & 0b0010U)) >> 1U;
-            sprite[coord + 16] = (((msb & 0b0100U) << 1U) | (lsb & 0b0100U)) >> 2U;
-            sprite[coord + 0] = (((msb & 0b1000U) << 1U) | (lsb & 0b1000U)) >> 3U;
-        }
+        decodeStrip(spriteRom, sprite, i, 16, 0, 1, 3);
+        decodeStrip(spriteRom, sprite, i, 16, 1, 1, 0);
+        decodeStrip(spriteRom, sprite, i, 16, 2, 1, 1);
+        decodeStrip(spriteRom, sprite, i, 16, 3, 1, 2);
+        decodeStrip(spriteRom, sprite, i, 16, 4, 0, 3);
+        decodeStrip(spriteRom, sprite, i, 16, 5, 0, 0);
+        decodeStrip(spriteRom, sprite, i, 16, 6, 0, 1);
+        decodeStrip(spriteRom, sprite, i, 16, 7, 0, 2);
     }
 
     return true;
