@@ -23,9 +23,17 @@ std::uint8_t Pacman::read8(std::uint16_t addr) const
     } else if (addr < 0x5000) {
         return ram[addr - 0x4000];
     } else if (addr < 0x5100) { // Memory Mapped Registers
+        /**
+         * Read registers not used in Pac-Man
+         * 0x5004: 1 player start lamp
+         * 0x5005: 2 player start lamp
+         * 0x5006: Coin lockout
+         * 0x5007: Coin Counter
+         */
+
         if (addr == 0x5003) {
             return flipScreen;
-        } else if (0x5007 < addr and addr < 0x5040) { // IN0 (joystick and coin slot)
+        } else if (addr < 0x5003 or (0x5007 < addr and addr < 0x5040)) { // IN0 (joystick and coin slot)
             return input0;
         } else if (addr < 0x5080) { // IN1 (joystick and start buttons)
             return input1;
@@ -48,7 +56,7 @@ void Pacman::write8(std::uint16_t addr, const std::uint8_t val)
         ram[addr - 0x4000] = val;
     } else if (addr < 0x5100) { // Memory Mapped Registers
         /**
-         * Registers not used in Pac-Man:
+         * Write registers not used in Pac-Man:
          * 0x5002: ??? Aux board enable?
          * 0x5004: 1 player start lamp
          * 0x5005: 2 player start lamp
@@ -119,16 +127,20 @@ void Pacman::drawTile(const int loc, const int x, const int y)
     }
 }
 
-void Pacman::drawSprite(const int loc, const int x, const int y, const bool xflip, const bool yflip)
+void Pacman::drawSprite(const int loc, const int x, const int y)
 {
     if (x > screenWidth or y > screenHeight) return;
+    const std::uint8_t byte0 {ram[loc - 0x4000]};
+    const bool xflip {static_cast<bool>(byte0 & 0b10)}, yflip {static_cast<bool>(byte0 & 0b01)};
 
-    const Sprite& sprite {sprites[ram[loc >> 2]]};
-    const Palette& palette {palettes[ram[loc + 1] & 0x3F]};
+    const Sprite& sprite {sprites[byte0 >> 2]};
+    const Palette& palette {palettes[ram[loc + 1 - 0x4000] & 0x3F]};
 
     for (int i {0}; i != 16; ++i) {
         for (int j {0}; j != 16; ++j) {
-            rasterBuffer[y + (xflip ? 15 - i : i)][x + (yflip ? 15 - j : j)] = palette[sprite[j + (i << 4)]];
+            if (palette[sprite[j + (i << 4)]] == 0xFF000000)
+                continue;
+            rasterBuffer[y + (yflip ? 15 - i : i)][x + (xflip ? 15 - j : j)] = palette[sprite[j + (i << 4)]];
         }
     }
 }
@@ -153,10 +165,10 @@ void Pacman::draw()
             drawTile(960 + x + (y * 32), 29 - x, y);
     }
 
-    // sprites
-    for (int i {0}, n {0}; i != 8; ++i)
-        drawSprite(i * 2 + 0x4FF0, screenWidth - spritePos[i * 2] + 15, screenHeight - spritePos[i * 2 + 1] - 16, (i * 2 + 0x4FF0) & 0b10, (i * 2 + 0x4FF0) & 0b01);
-
+    // sprites (drawn in reverse order)
+    for (int i {7}; i != -1; --i) {
+        drawSprite(i * 2 + 0x4FF0, screenWidth - spritePos[i * 2] + 15, screenHeight - spritePos[i * 2 + 1] - 16);
+    }
 
     SDL_UpdateTexture(texture, nullptr, rasterBuffer, pitch);
     SDL_RenderClear(renderer);

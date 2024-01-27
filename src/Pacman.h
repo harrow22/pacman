@@ -111,10 +111,8 @@ private:
      * @param loc selects the sprite from sprite ram
      * @param x the x coordinate [0,27] (sprite's upper left corner)
      * @param y the y coordinate [0,35] (sprite's upper left corner)
-     * @param xflip if true flips the sprite horizontally
-     * @param yflip if true flips the sprite vertically
      */
-    void drawSprite(int loc, int x, int y, bool xflip, bool yflip);
+    void drawSprite(int loc, int x, int y);
 
     /**
      * Initializes SDL2 objects.
@@ -140,7 +138,7 @@ private:
     bool preload(const std::string& dir);
 
     const std::uint8_t dipswitch; // game settings
-    std::uint8_t input0 {}, input1 {0b10010000U}; // default cabinet mode is upright and board test is off
+    std::uint8_t input0 {0b10011111}, input1 {0b11111111U}; // default cabinet mode is upright and board test is off
     bool soundEnabled {false}, flipScreen {false};
 
     std::uint32_t rasterBuffer[screenHeight][screenWidth] {};
