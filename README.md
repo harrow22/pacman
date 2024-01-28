@@ -30,6 +30,7 @@ This is an emulator of the 1980 Pac-Man arcade machine by Midway. Mainly created
 ### Build & Run
 ```angular2html
 git clone https://github.com/harrow22/pacman.git
+cd pacman
 cmake -S . -B build -G <generator> -DCMAKE_BUILD_TYPE=RELEASE -DCMAKE_PREFIX_PATH=<path/to/sdl>
 cmake --build build --config Release
 build/pacman.exe <PARAMETERS...>
