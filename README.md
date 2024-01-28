@@ -1,7 +1,7 @@
 # Pac-Man Emulator
 This is an emulator of the 1980 Pac-Man arcade machine by Midway. Mainly created because I wanted a quick project that utilized my [Z80 emulator](https://github.com/harrow22/z80). Sound has not (yet?) been implemented.
 <p align="center">
-  <img alt="Pac-Man attract mode gif" src="https://raw.githubusercontent.com/harrow22/SpaceInvaders/master/examples/attract_mode.gif" height="400" />
+  <img alt="Pac-Man attract mode gif" src="https://raw.githubusercontent.com/harrow22/pacman/master/examples/demo.gif" height="400" />
 </p>
 
 # Controls
