@@ -101,17 +101,6 @@ int main(int argc, char** argv)
         }
 
         unsigned long long begin {SDL_GetTicks64()};
-
-        /*
-        int executed {0};
-        z.requested = cycles - z.requested;
-        while(z.requested > 0) {
-            const int tmp {z.requested};
-            z.step();
-            executed += tmp - z.requested;
-            std::cout << z.toString(executed) << '\n';
-        }
-        */
         cycles = cyclesPerFrame + z.run(cycles); // z.run -> a negative value representing the number of exceeded cycles
 
         // draw a frame
