@@ -35,8 +35,8 @@ cmake --build build --config Release
 build/pacman.exe <PARAMETERS...>
 ```
 
-### DIP Switch (optional)
-Replace `<PARAMETERS...>` with any of the following:
+### DIP Switch
+Replace `<PARAMETERS...>` with zero or more of the following:
 
 | Parameter               | Range                  | Default | Description                                                                  |
 |-------------------------|------------------------|---------|------------------------------------------------------------------------------| 
