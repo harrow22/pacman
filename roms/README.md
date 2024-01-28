@@ -1,5 +1,5 @@
 # Pac-Man roms
-In order to run the emulator you will need to provide the following files yourself.
+In order to run the emulator you will need to add the following files to this directory yourself.
 * `pacman.6e`
 * `pacman.6f`
 * `pacman.6h`
