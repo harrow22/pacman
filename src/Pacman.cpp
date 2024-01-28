@@ -43,12 +43,12 @@ void decodeStrip(const std::uint8_t* rom, std::uint8_t* array, const int imageNu
 {
     for (int j {0}; j != 8; ++j) {
         const std::uint8_t byte {rom[j + (stripNum * 8) + (imageNum * pitch * (pitch / 8 * 2))]};
-        const int px {(y * pitch * 4) + ((x + 1) * 8 - 1) - j};
+        const int xBase {(y * pitch * 4) + ((x + 1) * 8 - 1) - j};
 
-        array[px + pitch * 3] = ((byte & 0x10) >> 3U) | ((byte & 0x01U) >> 0U);
-        array[px + pitch * 2] = ((byte & 0x20) >> 4U) | ((byte & 0x02U) >> 1U);
-        array[px + pitch * 1] = ((byte & 0x40) >> 5U) | ((byte & 0x04U) >> 2U);
-        array[px + pitch * 0] = ((byte & 0x80) >> 6U) | ((byte & 0x08U) >> 3U);
+        array[xBase + pitch * 3] = ((byte & 0x10) >> 3U) | ((byte & 0x01U) >> 0U);
+        array[xBase + pitch * 2] = ((byte & 0x20) >> 4U) | ((byte & 0x02U) >> 1U);
+        array[xBase + pitch * 1] = ((byte & 0x40) >> 5U) | ((byte & 0x04U) >> 2U);
+        array[xBase + pitch * 0] = ((byte & 0x80) >> 6U) | ((byte & 0x08U) >> 3U);
     }
 }
 
@@ -176,17 +176,23 @@ void Pacman::drawTile(const int loc, const int x, const int y)
 
 void Pacman::drawSprite(const int loc, const int x, const int y)
 {
-    if (x > screenWidth or y > screenHeight) return;
+    if (x > screenWidth) return;
     const std::uint8_t byte0 {ram[loc]}; // upper 6 bits are the sprite #, bit 1 is flip-x, bit 0 is flip-y
     const Sprite& sprite {sprites[byte0 >> 2]};
     const Palette& palette {palettes[ram[loc + 1] & 0x3F]};
-    const bool flipX {static_cast<bool>(byte0 & 0b10)}, flipY {static_cast<bool>(byte0 & 0b01)};
+    const bool flipX {static_cast<bool>(byte0 & 0b10)};
+    const bool flipY {static_cast<bool>(byte0 & 0b01)};
 
     for (int i {0}; i != 16; ++i) {
         for (int j {0}; j != 16; ++j) {
             const std::uint32_t color {palette[sprite[j + (i << 4)]]};
-            if (color == black) continue;
-            rasterBuffer[y + (flipY ? 15 - i : i)][x + (flipX ? 15 - j : j)] = color;
+            const int xCoord {x + (flipX ? 15 - j : j)};
+            const int yCoord {y + (flipY ? 15 - i : i)};
+
+            if (color == black or xCoord < 0 or xCoord >= screenWidth)
+                continue;
+
+            rasterBuffer[yCoord][xCoord] = color;
         }
     }
 }

@@ -44,7 +44,7 @@ Replace `<PARAMETERS...>` with zero or more of the following:
 | `-lives_per_game <n>`   | 1,2,3 or 5             | 3       | changes the number of lives per game                                         |
 | `-extra_life_score <n>` | 10000,15000,20000 or 0 | 10000   | changes the number of points needed to gain an extra life, none=0            |
 | `-difficulty <str>`     | NORMAL or HARD         | NORMAL  | changes the algorithm the ghosts use, making less places for Pac-Man to hide |
-| `-ghost_names <str>`    | NORMAL or HARD         | NORMAL  | changes the ghosts nicknames                                                 |
+| `-ghost_names <str>`    | NORMAL or ALT          | NORMAL  | changes the ghosts nicknames                                                 |
 
 # Resources
 * [Chris Lomont's Pac-Man Emulation Guide](https://www.lomont.org/software/games/pacman/PacmanEmulation.pdf)
