@@ -33,7 +33,7 @@ git clone https://github.com/harrow22/pacman.git
 cd pacman
 cmake -S . -B build -G <generator> -DCMAKE_BUILD_TYPE=RELEASE -DCMAKE_PREFIX_PATH=<path/to/sdl>
 cmake --build build --config Release
-build/pacman.exe <PARAMETERS...>
+build/src/pacman.exe <PARAMETERS...>
 ```
 
 ### DIP Switch
